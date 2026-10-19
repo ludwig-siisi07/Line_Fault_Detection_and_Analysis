@@ -1,7 +1,8 @@
 """
-file recomputes every number quoted in the report and draws the report figures.
-Run from the repository root: python python/evaluate_and_figures.py
-Reads: data/fault_dataset_train.csv, data/fault_dataset_ood.csv
+evaluate_and_figures.py
+Recomputes every number quoted in the report and draws the report figures.
+Run from the repository root:   python python/evaluate_and_figures.py
+Reads : data/fault_dataset_train.csv, data/fault_dataset_ood.csv
 Writes: results/metrics.json, figures/*.png
 """
 import json, os
@@ -185,7 +186,7 @@ for nm, D in [("train", F), ("ood", Fo)]:
     e = baseline(D)
     M["baseline"][nm] = {"mae": float(e.mean()), "median": float(np.median(e)), "within_2km": float((e <= 2).mean())}
 
-# peak-phase fault current for low-resistance faults (training set)
+# simulation vs circuit theory: peak-phase fault current for low-resistance faults (training set)
 E = 263.1e3 / np.sqrt(3)
 chk = {}
 for c, lab in [(4, "LLL"), (1, "LG"), (2, "LL")]:
@@ -204,38 +205,60 @@ plt.rcParams.update({"font.size": 10, "axes.spines.top": False, "axes.spines.rig
 C = {"NF": "#7a7a7a", "LG": "#1f77b4", "LL": "#d62728", "LLG": "#ff9f1c", "LLL": "#2ca02c"}
 
 
-def box(ax, x, y, w, h, txt, fc="#e8f1fb", ec="#1f4e79", fs=9):
-    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.02", fc=fc, ec=ec, lw=1.2))
-    ax.text(x + w / 2, y + h / 2, txt, ha="center", va="center", fontsize=fs)
+def box(ax, x, y, w, h, txt, fc="#e8f1fb", ec="#1f4e79", fs=10):
+    """Rounded box with centred text. The font shrinks until the text fits inside the box."""
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0,rounding_size=0.1", fc=fc, ec=ec, lw=1.4))
+    t = ax.text(x + w / 2, y + h / 2, txt, ha="center", va="center", fontsize=fs, linespacing=1.25)
+    r = ax.figure.canvas.get_renderer()
+    x0, y0 = ax.transData.transform((x, y))
+    x1, y1 = ax.transData.transform((x + w, y + h))
+    while fs > 5:
+        bb = t.get_window_extent(r)
+        if bb.width <= 0.88 * (x1 - x0) and bb.height <= 0.80 * (y1 - y0):
+            break
+        fs -= 0.5
+        t.set_fontsize(fs)
 
 
-def arrow(ax, x0, y0, x1, y1):
-    ax.add_patch(FancyArrowPatch((x0, y0), (x1, y1), arrowstyle="-|>", mutation_scale=12, lw=1.2, color="#333333"))
+def arrow(ax, x0, y0, x1, y1, color="#333333"):
+    ax.add_patch(FancyArrowPatch((x0, y0), (x1, y1), arrowstyle="-|>", mutation_scale=14, lw=1.5,
+                                 color=color, shrinkA=0, shrinkB=0))
 
 
-fig, ax = plt.subplots(figsize=(8.2, 2.9))
-ax.set_xlim(0, 10); ax.set_ylim(0, 3.4); ax.axis("off")
-box(ax, 0.1, 1.5, 1.5, 1.0, "Source\n263.1 kV (L-L)\n1 + j10 ohm")
-box(ax, 2.1, 1.5, 1.2, 1.0, "Sending-end\nmeasurement\n(V, I)", fc="#fff4d6", ec="#9c6b00")
-box(ax, 3.8, 1.5, 1.2, 1.0, "Line1\nd km")
-box(ax, 5.5, 1.5, 1.4, 1.0, "Line2\n(40 - d) km")
-box(ax, 7.6, 1.5, 1.4, 1.0, "Load\n381 MVA\n0.8 pf lag")
-box(ax, 3.75, 0.1, 3.0, 0.8, "Fault: LG, LL, LLG, LLL\nresistance Rf", fc="#fde2e2", ec="#a32020")
-for x0, x1 in [(1.6, 2.1), (3.3, 3.8), (5.0, 5.5), (6.9, 7.6)]:
-    arrow(ax, x0, 2.0, x1, 2.0)
-ax.plot([5.25, 5.25], [0.9, 1.5], color="#a32020", lw=1.6)
-ax.text(5.35, 1.12, "at distance d", fontsize=8, color="#a32020")
-ax.text(5.0, 3.0, "220 kV, 60 Hz, 40 km line: R = 0.15 ohm/km, L = 1.3263 mH/km", ha="center", fontsize=9)
+# ---- system diagram ----
+fig, ax = plt.subplots(figsize=(9.0, 3.8))
+ax.set_xlim(-0.15, 10.15); ax.set_ylim(0, 4.2); ax.axis("off")
+W, G = 1.6, 0.5                        # box width and gap (5 boxes + 4 gaps = 10)
+xs = [i * (W + G) for i in range(5)]
+Y, H = 2.0, 1.3
+ymid = Y + H / 2
+ax.text(5.0, 3.9, "220 kV, 60 Hz, 40 km line:  R = 0.15 ohm/km,  L = 1.3263 mH/km", ha="center", fontsize=11)
+labels = ["Source\n263.1 kV (L-L)\n1 + j10 ohm", "Sending-end\nmeasurement\n(V, I)", "Line 1\nd km",
+          "Line 2\n(40 - d) km", "Load\n381 MVA\n0.8 pf lag"]
+styles = [dict(), dict(fc="#fff4d6", ec="#9c6b00"), dict(), dict(), dict()]
+for x, t, st in zip(xs, labels, styles):
+    box(ax, x, Y, W, H, t, **st)
+for i in range(4):
+    arrow(ax, xs[i] + W, ymid, xs[i + 1], ymid)
+jx = xs[2] + W + G / 2                  # the fault joins the line between Line 1 and Line 2
+ax.plot([jx, jx], [ymid, 1.05], color="#a32020", lw=2)
+ax.plot([jx], [ymid], "o", color="#a32020", ms=6)
+ax.text(jx + 0.15, 1.5, "at distance d", fontsize=9.5, color="#a32020", va="center")
+box(ax, jx - 1.7, 0.1, 3.4, 0.95, "Fault: LG, LL, LLG or LLL\nfault resistance Rf", fc="#fde2e2", ec="#a32020")
 fig.savefig("figures/fig_system.png"); plt.close(fig)
 
-fig, ax = plt.subplots(figsize=(8.2, 2.0))
-ax.set_xlim(0, 10); ax.set_ylim(0, 2); ax.axis("off")
+# ---- pipeline diagram ----
+fig, ax = plt.subplots(figsize=(9.5, 2.6))
+ax.set_xlim(-0.15, 10.15); ax.set_ylim(0, 2.6); ax.axis("off")
+W, G = 1.76, 0.30                      # 5 boxes + 4 gaps = 10
 steps = ["Simulink +\nMATLAB sweep\n(random faults)", "Trigger +\n1-cycle windows",
-         "37 features\n(phasors, sequence,\nimpedance)", "Models\nRandom Forest,\nExtra Trees", "Output:\nfault? type,\ndistance"]
+         "37 features\n(phasors,\nsequence,\nimpedance)", "Models:\nRandom Forest,\nExtra Trees",
+         "Output:\nfault? type,\ndistance"]
 for i, t in enumerate(steps):
-    box(ax, 0.1 + i * 2.0, 0.4, 1.6, 1.2, t, fs=8.5)
+    x = i * (W + G)
+    box(ax, x, 0.5, W, 1.6, t, fs=9.5)
     if i < len(steps) - 1:
-        arrow(ax, 1.7 + i * 2.0, 1.0, 2.1 + i * 2.0, 1.0)
+        arrow(ax, x + W + 0.03, 1.3, x + W + G - 0.03, 1.3)
 fig.savefig("figures/fig_pipeline.png"); plt.close(fig)
 
 fig, axs = plt.subplots(1, 3, figsize=(8.2, 2.9))
