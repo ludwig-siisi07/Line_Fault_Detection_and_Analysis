@@ -3,7 +3,7 @@
  `Transmission_Line_Model1.slx`
   The MATLAB script: `matlab/run_fault_sweep.m` 
 
-![Model screenshot](model_screenshot.png)
+![Model screenshot](model_image.jpeg)
 
 ## Block names the script looks for
 
